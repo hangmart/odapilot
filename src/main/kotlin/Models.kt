@@ -1,4 +1,5 @@
 import kotlinx.serialization.Serializable
+import java.time.Instant
 
 @Serializable
 data class Product(
@@ -9,10 +10,8 @@ data class Product(
     val productType: String? = null,
 )
 
-@Serializable
 data class OrderSummary(
     val id: Int = 0,
     val odaOrderId: String,
-    val orderedAt: String,
-    val orderedAtIso: String? = null,
+    val orderedAt: Instant,
 )

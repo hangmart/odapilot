@@ -17,7 +17,15 @@ class Odapilot : CliktCommand() {
 
     override fun run() {
         logger.info { "Odapilot starting — email=$email, port=$port" }
-        logger.info { "Scaffold complete. Exiting." }
+
+        val db = Database()
+        try {
+            db.connect()
+            db.initialize()
+            logger.info { "Database ready. Exiting." }
+        } finally {
+            db.close()
+        }
     }
 }
 
