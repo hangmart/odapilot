@@ -44,7 +44,8 @@ products (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   oda_product_id INTEGER UNIQUE,
   name TEXT NOT NULL,
-  category TEXT
+  category TEXT,
+  product_type TEXT              -- groups product variants (e.g. all banana SKUs → "Banan")
 )
 
 meals (
@@ -63,7 +64,8 @@ meal_ingredients (
 orders (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   oda_order_id TEXT UNIQUE NOT NULL,
-  ordered_at TEXT NOT NULL
+  ordered_at TEXT NOT NULL,       -- raw date from Oda (Norwegian format, e.g. "fre 20. mars, 18:59")
+  ordered_at_iso TEXT             -- parsed to ISO 8601 for calculations
 )
 
 order_items (
@@ -115,7 +117,7 @@ x-requested-case: camel
 ```
 
 ### Endpoints to implement:
-- `GET /api/v1/orders` — list orders (paginated by periods)
+- `GET /api/v1/orders?through-date={ISO-date}` — list orders, paginated via `through-date` param. Response contains `hasMore` and `getMoreUrl` for next page
 - `GET /api/v1/orders/{id}` — order details with line items
 - `GET /api/v1/cart/` — current cart
 - `POST /api/v1/cart/items/?group_by=recipes` — add to cart (body: `{"items": [{"product_id": id, "quantity": qty}]}`)
@@ -125,9 +127,12 @@ x-requested-case: camel
 
 ### Order sync logic:
 - Run on startup, then every 6 hours via a coroutine with `while(true) { delay(6.hours) }`
-- Fetch order list, for each order not already in SQLite, fetch details and upsert
-- Add 2-3 second delay between API calls to avoid looking suspicious
+- Fetch order list page, for each order not already in SQLite, fetch details and upsert
+- Follow `hasMore`/`getMoreUrl` for pagination. Support a `maxPages` config to limit full history fetches
+- Add 3-6 second random delay between pages, 4-8 seconds between order detail fetches
 - Products come from order details — `itemGroups` with `type: "category"` contain items and a category `name`
+- Parse Norwegian dates to ISO 8601 on upsert (Oda returns "fre 20. mars, 18:59" — no year, must be inferred)
+- Classify `product_type` for new products on upsert. Match against existing types first; for genuinely new products, use LLM classification to assign a type consistent with existing ones
 - Must be idempotent — safe to run any number of times
 
 Only model the fields we actually need from Oda responses. Use kotlinx.serialization with `ignoreUnknownKeys = true`.
@@ -146,29 +151,48 @@ DELETE /cart/items/{id}     — remove item from cart
 
 ### Analysis endpoints:
 ```
-GET  /stats                 — order statistics and replenishment suggestions
+GET  /stats                 — per-product_type feature profiles for LLM consumption
 ```
 
-The stats response should include:
+Returns the top ~50 product types sorted by urgency (most overdue first). Only includes types with 5+ orders and filters out dormant items (urgency > 4).
 
-1. **Replenishment suggestions**: For each product with 3+ orders, calculate median days between orders. Return products where `days_since_last_order >= median_interval * 0.8`. Include product name, days since last, median interval, and how overdue.
+Each entry contains these features:
 
-2. **Top products**: Top 20 most ordered products with count and average interval.
+- `product_type` — grouping name
+- `order_count` — number of orders containing this type
+- `freq_all_time` — fraction of all orders (0-1)
+- `weighted_freq` — time-decayed frequency (exponential decay, half-life ~90 days)
+- `freq_recent_30d` — orders in last 30 days
+- `avg_gap_days` — mean days between purchases
+- `avg_gap_per_unit` — **quantity-normalized**: gap_days / quantity bought. Buying 2 packs doubles the expected interval. This is the key cycle indicator
+- `weighted_avg_gap` — recency-weighted version of above
+- `cv` — coefficient of variation (stddev/mean of intervals). Low (<0.5) = predictable, high (>0.8) = erratic
+- `days_since_last` — days since last purchase
+- `last_order_date` — date of last purchase
+- `last_qty` — quantity in last order
+- `avg_qty_per_order` — typical quantity
+- `urgency` — `days_since_last / (avg_gap_per_unit × last_qty)`. >1.0 = overdue
 
-3. **Co-purchase patterns**: Product pairs that frequently appear in the same order. Top 20 by co-occurrence count.
-
-4. **Category breakdown**: Order frequency grouped by Oda category.
-
-The median calculation should be done in Kotlin — SQLite doesn't have a native median function.
+Do NOT apply rigid classification (e.g. FAST/VARIABEL). The agent LLM reasons better from raw features than from pre-bucketed labels. Threshold tuning proved brittle in PoC testing.
 
 ### Meal planning endpoints:
 ```
-GET  /meals                 — all registered meals with ingredients
+GET  /meals                 — all registered meals with ingredients (grouped by meal, product_type per ingredient)
 POST /meals                 — add a meal (body: {"name": "Taco", "ingredients": [{"productId": 123, "quantity": 1, "unit": "pkg"}]})
 GET  /meal-plans?weeks=4    — recent meal plans
 POST /meal-plans            — save a weekly meal plan
 GET  /plan-feedback         — diff between suggested plans and actual orders
 ```
+
+### Expected agent workflow for generating a shopping list:
+
+The agent should follow this two-step flow:
+
+1. **Meal planning**: Call `GET /meals` → select 5-7 dinners for the week → build ingredient list
+2. **Replenishment**: Call `GET /stats` → build replenishment list, **excluding product_types already covered by the meal ingredient list**
+3. **Combine**: Merge both lists into a single shopping list grouped by category
+
+This separation avoids double-counting (e.g. brokkoli appearing both as a dinner ingredient and a replenishment item).
 
 ## Phase 5: Background sync and lifecycle
 
@@ -192,7 +216,7 @@ src/main/kotlin/
   OdaClient.kt         — Ktor client for Oda API
   Database.kt          — SQLite setup and repository functions
   Routes.kt            — Ktor route definitions
-  Analysis.kt          — Stats calculations (median, co-purchase, etc.)
+  Analysis.kt          — Feature profile calculations (intervals, CV, urgency, etc.)
   Models.kt            — Data classes for domain objects and API responses
 ```
 
