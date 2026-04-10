@@ -5,6 +5,7 @@ import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
 import com.github.ajalt.clikt.parameters.types.int
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.coroutines.runBlocking
 
 private val logger = KotlinLogging.logger {}
 
@@ -19,11 +20,18 @@ class Odapilot : CliktCommand() {
         logger.info { "Odapilot starting — email=$email, port=$port" }
 
         val db = Database()
+        val odaClient = OdaClient(email, password)
         try {
             db.connect()
             db.initialize()
-            logger.info { "Database ready. Exiting." }
+
+            val sync = OrderSync(odaClient, db)
+            runBlocking {
+                odaClient.login()
+                sync.syncOrders()
+            }
         } finally {
+            odaClient.close()
             db.close()
         }
     }

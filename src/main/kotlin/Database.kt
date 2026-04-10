@@ -109,22 +109,15 @@ class Database(private val path: String = "odapilot.db") {
     }
 
     fun insertOrder(odaOrderId: String, orderedAt: java.time.Instant): Int {
-        val ps = conn.prepareStatement(
-            "INSERT OR IGNORE INTO orders (oda_order_id, ordered_at) VALUES (?, ?)",
-            Statement.RETURN_GENERATED_KEYS
-        )
+        val ps = conn.prepareStatement("INSERT OR IGNORE INTO orders (oda_order_id, ordered_at) VALUES (?, ?)")
         ps.setString(1, odaOrderId)
         ps.setString(2, orderedAt.toString())
         ps.executeUpdate()
 
-        val keys = ps.generatedKeys
-        if (keys.next()) return keys.getInt(1)
-
-        // If INSERT OR IGNORE didn't insert (already exists), look up the ID
         val lookup = conn.prepareStatement("SELECT id FROM orders WHERE oda_order_id = ?")
         lookup.setString(1, odaOrderId)
         val rs = lookup.executeQuery()
-        return if (rs.next()) rs.getInt(1) else -1
+        return rs.getInt(1)
     }
 
     fun upsertProduct(odaProductId: Int, name: String, category: String?, productType: String?): Int {
@@ -136,8 +129,7 @@ class Database(private val path: String = "odapilot.db") {
                 name = excluded.name,
                 category = excluded.category,
                 product_type = COALESCE(products.product_type, excluded.product_type)
-            """,
-            Statement.RETURN_GENERATED_KEYS
+            """
         )
         ps.setInt(1, odaProductId)
         ps.setString(2, name)
@@ -145,13 +137,10 @@ class Database(private val path: String = "odapilot.db") {
         ps.setString(4, productType)
         ps.executeUpdate()
 
-        val keys = ps.generatedKeys
-        if (keys.next()) return keys.getInt(1)
-
         val lookup = conn.prepareStatement("SELECT id FROM products WHERE oda_product_id = ?")
         lookup.setInt(1, odaProductId)
         val rs = lookup.executeQuery()
-        return if (rs.next()) rs.getInt(1) else -1
+        return rs.getInt(1)
     }
 
     fun insertOrderItem(orderId: Int, productId: Int, quantity: Int) {
