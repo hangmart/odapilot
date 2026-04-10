@@ -65,14 +65,14 @@ class DatabaseTest : FunSpec({
         rs.getString("category") shouldBe "Frukt og grønt"
     }
 
-    test("upsertProduct preserves existing product_type") {
+    test("upsertProduct preserves existing normalized_name") {
         db.upsertProduct(1001, "Bananer", "Frukt", "Banan")
         db.upsertProduct(1001, "Bananer", "Frukt", null)
 
-        val rs = conn.prepareStatement("SELECT product_type FROM products WHERE oda_product_id = 1001")
+        val rs = conn.prepareStatement("SELECT normalized_name FROM products WHERE oda_product_id = 1001")
             .executeQuery()
         rs.next() shouldBe true
-        rs.getString("product_type") shouldBe "Banan"
+        rs.getString("normalized_name") shouldBe "Banan"
     }
 
     test("insertOrderItem links order and product") {

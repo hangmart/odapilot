@@ -12,7 +12,7 @@ data class Product(
     val odaProductId: Int,
     val name: String,
     val category: String? = null,
-    val productType: String? = null,
+    val normalizedName: String? = null,
 )
 
 data class OrderSummary(

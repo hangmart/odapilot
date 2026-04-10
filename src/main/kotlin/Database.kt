@@ -28,7 +28,7 @@ class Database(private val path: String = "odapilot.db") {
                     oda_product_id INTEGER UNIQUE,
                     name TEXT NOT NULL,
                     category TEXT,
-                    product_type TEXT
+                    normalized_name TEXT
                 )
             """)
 
@@ -120,21 +120,21 @@ class Database(private val path: String = "odapilot.db") {
         return rs.getInt(1)
     }
 
-    fun upsertProduct(odaProductId: Int, name: String, category: String?, productType: String?): Int {
+    fun upsertProduct(odaProductId: Int, name: String, category: String?, normalizedName: String?): Int {
         val ps = conn.prepareStatement(
             """
-            INSERT INTO products (oda_product_id, name, category, product_type)
+            INSERT INTO products (oda_product_id, name, category, normalized_name)
             VALUES (?, ?, ?, ?)
             ON CONFLICT(oda_product_id) DO UPDATE SET
                 name = excluded.name,
                 category = excluded.category,
-                product_type = COALESCE(products.product_type, excluded.product_type)
+                normalized_name = COALESCE(products.normalized_name, excluded.normalized_name)
             """
         )
         ps.setInt(1, odaProductId)
         ps.setString(2, name)
         ps.setString(3, category)
-        ps.setString(4, productType)
+        ps.setString(4, normalizedName)
         ps.executeUpdate()
 
         val lookup = conn.prepareStatement("SELECT id FROM products WHERE oda_product_id = ?")

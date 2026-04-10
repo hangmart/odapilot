@@ -62,7 +62,7 @@ class OrderSync(
                     odaProductId = item.productId,
                     name = item.description,
                     category = group.name,
-                    productType = null,
+                    normalizedName = null,
                 )
                 db.insertOrderItem(orderId, productId, item.quantity.toInt())
             }
