@@ -22,16 +22,17 @@ private val NORWEGIAN_MONTHS = mapOf(
     "okt" to 10, "nov" to 11, "des" to 12,
 )
 
-fun parseNorwegianDate(raw: String): Instant? {
+fun parseNorwegianDate(raw: String, referenceDate: LocalDate = LocalDate.now()): Instant? {
     val match = Regex("""(\d{1,2})\.\s*(\w+),?\s*(\d{2}):(\d{2})""").find(raw) ?: return null
     val (dayStr, monthStr, hourStr, minStr) = match.destructured
     val month = NORWEGIAN_MONTHS[monthStr.lowercase()] ?: return null
     val day = dayStr.toInt()
 
-    val today = LocalDate.now()
-    var year = today.year
+    // A page can span a year boundary (e.g. through-date 2025-02-15 may include Dec 2024 orders).
+    // If the parsed date lands after the reference, it must belong to the previous year.
+    var year = referenceDate.year
     val candidate = LocalDate.of(year, month, day)
-    if (candidate.isAfter(today)) year--
+    if (candidate.isAfter(referenceDate)) year--
 
     val iso = "%04d-%02d-%02dT%02d:%02d:00Z".format(year, month, day, hourStr.toInt(), minStr.toInt())
     return Instant.parse(iso)
@@ -112,19 +113,18 @@ class OdaClient(
         return response.body()
     }
 
-    suspend fun getOrders(throughDate: String? = null): OdaOrdersResponse {
+    suspend fun getOrders(throughDate: String = LocalDate.now().toString()): OdaOrdersResponse {
         val response: OdaOrdersResponse = authenticatedGet("/api/v1/orders/") {
-            if (throughDate != null) {
-                parameter("through-date", throughDate)
-            }
+            parameter("through-date", throughDate)
         }
 
-        // Parse Norwegian delivery times to Instant
+        val refDate = LocalDate.parse(throughDate)
+
         return response.copy(
             results = response.results.map { group ->
                 group.copy(
                     orders = group.orders.map { order ->
-                        val parsed = order.delivery?.deliveryTime?.let { parseNorwegianDate(it) }
+                        val parsed = order.delivery?.deliveryTime?.let { parseNorwegianDate(it, refDate) }
                         order.copy(parsedDeliveryTime = parsed)
                     }
                 )

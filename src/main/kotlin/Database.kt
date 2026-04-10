@@ -102,6 +102,13 @@ class Database(private val path: String = "odapilot.db") {
         }
     }
 
+    fun latestOrderId(): String? {
+        val rs = conn.createStatement().executeQuery(
+            "SELECT oda_order_id FROM orders ORDER BY ordered_at DESC LIMIT 1"
+        )
+        return if (rs.next()) rs.getString(1) else null
+    }
+
     fun orderExists(odaOrderId: String): Boolean {
         val ps = conn.prepareStatement("SELECT 1 FROM orders WHERE oda_order_id = ?")
         ps.setString(1, odaOrderId)

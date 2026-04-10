@@ -11,12 +11,12 @@ class OrderSync(
 ) {
     suspend fun syncOrders() {
         logger.info { "Starting order sync..." }
-        var throughDate: String? = null
+        var throughDate = java.time.LocalDate.now().toString()
         var page = 0
 
         while (page < maxPages) {
             page++
-            logger.info { "Fetching order page $page${throughDate?.let { " (through $it)" } ?: ""}" }
+            logger.info { "Fetching order page $page (through $throughDate)" }
 
             val response = client.getOrders(throughDate)
             var newOrders = 0
@@ -35,10 +35,10 @@ class OrderSync(
 
             if (!response.hasMore) break
 
-            throughDate = response.getMoreUrl?.let {
+            val nextDate = response.getMoreUrl?.let {
                 Regex("through-date=([^&]+)").find(it)?.groupValues?.get(1)
-            }
-            if (throughDate == null) break
+            } ?: break
+            throughDate = nextDate
 
             delay((3000L..6000L).random())
         }
