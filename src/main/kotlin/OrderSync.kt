@@ -1,20 +1,27 @@
 import io.github.oshai.kotlinlogging.KotlinLogging
 import kotlinx.coroutines.delay
 import java.time.Instant
+import java.time.LocalDate
 
 private val logger = KotlinLogging.logger {}
 
 class OrderSync(
     private val client: OdaClient,
     private val db: Database,
-    private val maxPages: Int = 1,
+    private val cutoffYear: Int = 2025,
 ) {
     suspend fun syncOrders() {
-        logger.info { "Starting order sync..." }
-        var throughDate = java.time.LocalDate.now().toString()
-        var page = 0
+        val latestKnown = db.latestOrderId()
+        if (latestKnown != null) {
+            logger.info { "Most recent order in DB: $latestKnown" }
+        }
 
-        while (page < maxPages) {
+        logger.info { "Starting order sync..." }
+        var throughDate = LocalDate.now().toString()
+        var page = 0
+        var reachedKnown = false
+
+        while (!reachedKnown) {
             page++
             logger.info { "Fetching order page $page (through $throughDate)" }
 
@@ -23,12 +30,18 @@ class OrderSync(
 
             for (group in response.results) {
                 for (order in group.orders) {
+                    if (order.orderNumber == latestKnown) {
+                        reachedKnown = true
+                        logger.info { "Reached latest known order $latestKnown, stopping" }
+                        break
+                    }
                     if (db.orderExists(order.orderNumber)) continue
                     newOrders++
 
                     delay((4000L..8000L).random())
                     syncOrderDetail(order)
                 }
+                if (reachedKnown) break
             }
 
             logger.info { "Page $page: $newOrders new orders synced" }
@@ -38,6 +51,11 @@ class OrderSync(
             val nextDate = response.getMoreUrl?.let {
                 Regex("through-date=([^&]+)").find(it)?.groupValues?.get(1)
             } ?: break
+
+            if (LocalDate.parse(nextDate).year < cutoffYear) {
+                logger.info { "Next page ($nextDate) is before $cutoffYear, stopping" }
+                break
+            }
             throughDate = nextDate
 
             delay((3000L..6000L).random())
