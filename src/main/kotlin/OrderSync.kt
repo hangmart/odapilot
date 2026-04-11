@@ -11,11 +11,6 @@ class OrderSync(
     private val cutoffYear: Int = 2025,
 ) {
     suspend fun syncOrders() {
-        val latestKnown = db.latestOrderId()
-        if (latestKnown != null) {
-            logger.info { "Most recent order in DB: $latestKnown" }
-        }
-
         logger.info { "Starting order sync..." }
         var throughDate = LocalDate.now().toString()
         var page = 0
@@ -30,12 +25,11 @@ class OrderSync(
 
             for (group in response.results) {
                 for (order in group.orders) {
-                    if (order.orderNumber == latestKnown) {
+                    if (db.orderExists(order.orderNumber)) {
                         reachedKnown = true
-                        logger.info { "Reached latest known order $latestKnown, stopping" }
+                        logger.info { "Reached already-synced order ${order.orderNumber}, stopping" }
                         break
                     }
-                    if (db.orderExists(order.orderNumber)) continue
                     newOrders++
 
                     delay((4000L..8000L).random())
