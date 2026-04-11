@@ -1,4 +1,5 @@
 import io.github.oshai.kotlinlogging.KotlinLogging
+import kotlinx.serialization.Serializable
 import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.math.sqrt
@@ -19,6 +20,7 @@ private val logger = KotlinLogging.logger {}
 //   lastQty         — quantity in the most recent order
 //   avgQtyPerOrder  — mean quantity per order
 //   urgency         — daysSinceLast / (avgGapPerUnit × lastQty); >1.0 = overdue
+@Serializable
 data class ProductStats(
     val normalizedName: String,
     val orderCount: Int,
@@ -30,7 +32,7 @@ data class ProductStats(
     val weightedAvgGap: Double,
     val cv: Double,
     val daysSinceLast: Long,
-    val lastOrderDate: Instant,
+    val lastOrderDate: String,
     val lastQty: Int,
     val avgQtyPerOrder: Double,
     val urgency: Double,
@@ -115,7 +117,7 @@ object Analysis {
             weightedAvgGap = weightedAvgGap,
             cv = cv,
             daysSinceLast = daysSinceLast,
-            lastOrderDate = last.orderedAt,
+            lastOrderDate = last.orderedAt.toString(),
             lastQty = last.quantity,
             avgQtyPerOrder = avgQtyPerOrder,
             urgency = urgency,
