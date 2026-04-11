@@ -10,7 +10,6 @@ import io.ktor.server.application.*
 import io.ktor.server.engine.*
 import io.ktor.server.netty.*
 import io.ktor.server.plugins.contentnegotiation.*
-import kotlinx.coroutines.runBlocking
 
 private val logger = KotlinLogging.logger {}
 
@@ -26,20 +25,14 @@ class Odapilot : CliktCommand() {
 
         val db = Database()
         val odaClient = OdaClient(email, password)
+        val sync = OrderSync(odaClient, db)
         try {
             db.connect()
             db.initialize()
 
-            // TODO: sync is disabled on startup — will be triggered via POST /sync endpoint
-            // val sync = OrderSync(odaClient, db)
-            // runBlocking {
-            //     odaClient.login()
-            //     sync.syncOrders()
-            // }
-
             embeddedServer(Netty, port = port) {
                 install(ContentNegotiation) { json() }
-                configureRoutes(db)
+                configureRoutes(db, sync)
             }.start(wait = true)
         } finally {
             logger.info { "Shutting down..." }

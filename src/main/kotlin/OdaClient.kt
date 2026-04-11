@@ -74,6 +74,7 @@ class OdaClient(
     }
 
     suspend fun login() {
+        if (authenticated) return
         logger.info { "Logging in to Oda..." }
 
         // Step 1: GET login page to pick up csrftoken cookie

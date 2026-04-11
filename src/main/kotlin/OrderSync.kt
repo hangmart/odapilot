@@ -12,6 +12,7 @@ class OrderSync(
 ) {
     suspend fun syncOrders() {
         logger.info { "Starting order sync..." }
+        client.login()
         var throughDate = LocalDate.now().toString()
         var page = 0
         var reachedKnown = false
