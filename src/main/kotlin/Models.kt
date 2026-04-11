@@ -21,6 +21,8 @@ data class OrderSummary(
     val orderedAt: Instant,
 )
 
+data class Purchase(val orderedAt: Instant, val quantity: Int)
+
 // --- Oda API response models ---
 
 @Serializable

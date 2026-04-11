@@ -89,6 +89,49 @@ class DatabaseTest : FunSpec({
         rs.getInt("quantity") shouldBe 3
     }
 
+    test("orderHistoryByProduct groups by normalized name") {
+        val t1 = Instant.parse("2025-01-10T10:00:00Z")
+        val t2 = Instant.parse("2025-02-15T10:00:00Z")
+
+        val o1 = db.insertOrder("ORD-001", t1)
+        val o2 = db.insertOrder("ORD-002", t2)
+        val p1 = db.upsertProduct(1001, "Bananer i klase", "Frukt", "Banan")
+        val p2 = db.upsertProduct(1002, "Økologiske bananer", "Frukt", "Banan")
+        val p3 = db.upsertProduct(2001, "Melk", "Meieri", "Melk")
+
+        db.insertOrderItem(o1, p1, 2)
+        db.insertOrderItem(o2, p2, 1)
+        db.insertOrderItem(o1, p3, 3)
+
+        val history = db.orderHistoryByProduct()
+        history.keys shouldBe setOf("Banan", "Melk")
+
+        history["Banan"]!!.size shouldBe 2
+        history["Banan"]!![0] shouldBe Purchase(t1, 2)
+        history["Banan"]!![1] shouldBe Purchase(t2, 1)
+
+        history["Melk"]!!.size shouldBe 1
+        history["Melk"]!![0] shouldBe Purchase(t1, 3)
+    }
+
+    test("orderHistoryByProduct excludes unclassified products") {
+        val t1 = Instant.parse("2025-01-10T10:00:00Z")
+        val o1 = db.insertOrder("ORD-001", t1)
+        val p1 = db.upsertProduct(1001, "Bananer", "Frukt", null)
+        db.insertOrderItem(o1, p1, 1)
+
+        db.orderHistoryByProduct() shouldBe emptyMap()
+    }
+
+    test("totalOrderCount") {
+        db.totalOrderCount() shouldBe 0
+
+        db.insertOrder("ORD-001", Instant.parse("2025-01-10T10:00:00Z"))
+        db.insertOrder("ORD-002", Instant.parse("2025-02-15T10:00:00Z"))
+
+        db.totalOrderCount() shouldBe 2
+    }
+
     test("insertOrderItem is idempotent") {
         val now = Instant.parse("2025-03-20T18:59:00Z")
         val orderId = db.insertOrder("ORD-001", now)

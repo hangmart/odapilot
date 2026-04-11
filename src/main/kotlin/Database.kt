@@ -2,6 +2,7 @@ import io.github.oshai.kotlinlogging.KotlinLogging
 import java.sql.Connection
 import java.sql.DriverManager
 import java.sql.Statement
+import java.time.Instant
 
 private val logger = KotlinLogging.logger {}
 
@@ -115,7 +116,7 @@ class Database(private val path: String = "odapilot.db") {
         return ps.executeQuery().next()
     }
 
-    fun insertOrder(odaOrderId: String, orderedAt: java.time.Instant): Int {
+    fun insertOrder(odaOrderId: String, orderedAt: Instant): Int {
         val ps = conn.prepareStatement("INSERT OR IGNORE INTO orders (oda_order_id, ordered_at) VALUES (?, ?)")
         ps.setString(1, odaOrderId)
         ps.setString(2, orderedAt.toString())
@@ -158,6 +159,31 @@ class Database(private val path: String = "odapilot.db") {
         ps.setInt(2, productId)
         ps.setInt(3, quantity)
         ps.executeUpdate()
+    }
+
+    fun orderHistoryByProduct(): Map<String, List<Purchase>> {
+        val rs = conn.createStatement().executeQuery("""
+            SELECT p.normalized_name, o.ordered_at, oi.quantity
+            FROM order_items oi
+            JOIN products p ON p.id = oi.product_id
+            JOIN orders o ON o.id = oi.order_id
+            WHERE p.normalized_name IS NOT NULL
+            ORDER BY p.normalized_name, o.ordered_at
+        """)
+
+        val result = mutableMapOf<String, MutableList<Purchase>>()
+        while (rs.next()) {
+            val name = rs.getString(1)
+            val orderedAt = Instant.parse(rs.getString(2))
+            val quantity = rs.getInt(3)
+            result.getOrPut(name) { mutableListOf() }.add(Purchase(orderedAt, quantity))
+        }
+        return result
+    }
+
+    fun totalOrderCount(): Int {
+        val rs = conn.createStatement().executeQuery("SELECT COUNT(*) FROM orders")
+        return rs.getInt(1)
     }
 
     fun close() {
