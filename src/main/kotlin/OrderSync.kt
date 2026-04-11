@@ -85,5 +85,7 @@ class OrderSync(
                 db.insertOrderItem(orderId, productId, item.quantity.toInt())
             }
         }
+
+        // TODO: classify normalized_name for new products (currently done manually, needs LLM step)
     }
 }
